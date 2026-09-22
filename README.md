@@ -1,14 +1,16 @@
-# Welcome to your Lovable project
+# Service Scheduler Pro
+
+la idea es crear un programa que funcione como un calendario que avise al usuario de la fecha a la que un cliente se le tiene que dar un servisio, esta tiene que contener un aparatado en forma de notificaciones de que cliente le toca su servicio, en ella sus datos y la fecha de su ultimo servicio, el programa tiene que contener una forma de basiado de datos practico para el usuario
 
 This project was built with [Lovable](https://lovable.dev).
 
 ## Build with Lovable
 
-Open your project in the [Lovable editor](https://lovable.dev) and keep building.
+Continue developing this project in the [Lovable editor](https://lovable.dev/projects/c31aa910-861c-53a3-a4b5-6003c5e94376).
 
 - **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: connect the project to GitHub and every change made in Lovable is committed straight to your repository.
-- **Full ownership**: this code is yours. Push to your repository and your changes sync back into Lovable, ready for your next prompt.
+- **Stay in sync**: every change made in Lovable is committed straight to this repository.
+- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
 
 ## Development
 
@@ -20,10 +22,3 @@ cd <repository-name>
 npm i
 npm run dev
 ```
-
-## Built with
-
-- TanStack Start
-- TypeScript
-- React
-- Tailwind CSS
