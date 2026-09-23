@@ -159,6 +159,8 @@ export function ServiceDashboard() {
       <Header
         onAdd={() => setShowForm(true)}
         pending={notices.length}
+        tab={tab}
+        onTab={setTab}
       />
 
       <main className="mx-auto max-w-[1400px] px-6 py-8">
@@ -173,26 +175,79 @@ export function ServiceDashboard() {
           </div>
         )}
 
-        {/* Buscador de la base de datos */}
+        {/* Buscador de la base de datos con autocompletado */}
         <section className="mb-8">
-          <div className="rounded-xl border border-border/60 bg-card p-1 shadow-sm ring-1 ring-black/5">
-            <div className="relative">
-              <svg
-                className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-primary"
-                fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Buscar cliente por nombre, teléfono, dirección o tipo de servicio…"
-                aria-label="Buscar cliente"
-                className="h-14 w-full rounded-lg bg-transparent pl-12 pr-4 text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/20"
-              />
+          <div className="relative">
+            <div className="rounded-xl border border-border/60 bg-card p-1 shadow-sm ring-1 ring-black/5">
+              <div className="relative">
+                <svg
+                  className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-primary"
+                  fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setSuggestOpen(true);
+                  }}
+                  onFocus={() => setSuggestOpen(true)}
+                  onBlur={() => window.setTimeout(() => setSuggestOpen(false), 150)}
+                  onKeyDown={(e) => e.key === "Escape" && setSuggestOpen(false)}
+                  placeholder="Buscar cliente por nombre, teléfono, dirección o tipo de servicio…"
+                  aria-label="Buscar cliente"
+                  autoComplete="off"
+                  role="combobox"
+                  aria-expanded={suggestOpen}
+                  className="h-14 w-full rounded-lg bg-transparent pl-12 pr-4 text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
             </div>
+
+            {suggestOpen && query.trim() !== "" && (
+              <ul className="absolute left-0 right-0 top-full z-40 mt-1 max-h-80 overflow-auto rounded-xl border border-border bg-card py-1 shadow-xl ring-1 ring-black/5">
+                {filtered.length === 0 ? (
+                  <li className="px-4 py-3 text-sm text-muted-foreground">
+                    Sin coincidencias para «{query}»
+                  </li>
+                ) : (
+                  filtered.slice(0, 8).map((c) => {
+                    const meta = STATUS_META[getStatus(c)];
+                    return (
+                      <li key={c.id}>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            setQuery(c.name);
+                            setSuggestOpen(false);
+                            setTab("todos");
+                          }}
+                          className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted"
+                        >
+                          <span className="grid size-7 shrink-0 place-items-center rounded-full bg-muted font-mono text-[10px] font-bold">
+                            {initials(c.name)}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium">{c.name}</span>
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {[c.phone, c.service_type, c.address].filter(Boolean).join(" · ") || "Sin datos extra"}
+                            </span>
+                          </span>
+                          <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${meta.badge}`}>
+                            {meta.label}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })
+                )}
+              </ul>
+            )}
           </div>
+
           <div className="mt-3 flex items-center gap-3 px-2">
             <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
               Base de datos
@@ -211,70 +266,73 @@ export function ServiceDashboard() {
           </div>
         </section>
 
+        {tab === "todos" && (
+          <AllClientsView
+            clients={filtered}
+            total={clients.length}
+            history={history}
+            loading={loading}
+            query={query}
+            onServiced={(c) => void markServiced(c)}
+            onDelete={(c) => void removeClient(c)}
+          />
+        )}
+
+        {tab === "diario" && (
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
           {/* Calendario */}
           <div className="space-y-6 lg:col-span-8">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-xl font-semibold tracking-tight">
                 Calendario de servicios
               </h2>
-              <div className="flex items-center gap-1 rounded-lg border border-border bg-muted p-0.5">
-                <button
-                  onClick={() => setMonthOffset((v) => v - 1)}
-                  aria-label="Mes anterior"
-                  className="rounded-md px-3 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+              <div className="flex items-center gap-2">
+                <select
+                  aria-label="Mes"
+                  value={viewMonth}
+                  onChange={(e) => setViewMonth(Number(e.target.value))}
+                  className="h-8 cursor-pointer rounded-md border border-border bg-card px-2 text-xs font-medium shadow-sm outline-none focus:ring-2 focus:ring-primary/20"
                 >
-                  ‹
-                </button>
-                <button
-                  onClick={() => setMonthOffset(0)}
-                  className="rounded-md bg-card px-3 py-1 text-xs font-medium shadow-sm ring-1 ring-black/5"
-                >
-                  Hoy
-                </button>
-                <button
-                  onClick={() => setMonthOffset((v) => v + 1)}
-                  aria-label="Mes siguiente"
-                  className="rounded-md px-3 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
-                >
-                  ›
-                </button>
-              </div>
-            </div>
-
-            <CalendarMonth clients={clients} monthOffset={monthOffset} />
-
-            {/* Lista de clientes */}
-            <div className="overflow-hidden rounded-xl bg-card shadow-sm ring-1 ring-black/5">
-              <div className="flex items-center justify-between border-b border-border px-4 py-3">
-                <h3 className="text-sm font-semibold tracking-tight">Clientes</h3>
-                <span className="font-mono text-[11px] text-muted-foreground">
-                  {filtered.length} resultados
-                </span>
-              </div>
-              {loading ? (
-                <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-                  Cargando clientes…
-                </p>
-              ) : filtered.length === 0 ? (
-                <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-                  {query
-                    ? "Ningún cliente coincide con la búsqueda."
-                    : "Aún no hay clientes. Agrega el primero con el botón «Nuevo cliente»."}
-                </p>
-              ) : (
-                <div className="divide-y divide-border">
-                  {filtered.map((c) => (
-                    <ClientRow
-                      key={c.id}
-                      client={c}
-                      onServiced={() => void markServiced(c)}
-                      onDelete={() => void removeClient(c)}
-                    />
+                  {MONTHS.map((m, i) => (
+                    <option key={m} value={i}>{m}</option>
                   ))}
+                </select>
+                <select
+                  aria-label="Año"
+                  value={viewYear}
+                  onChange={(e) => setViewYear(Number(e.target.value))}
+                  className="h-8 cursor-pointer rounded-md border border-border bg-card px-2 font-mono text-xs font-medium shadow-sm outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  {YEARS.map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+                <div className="flex items-center gap-1 rounded-lg border border-border bg-muted p-0.5">
+                  <button
+                    onClick={() => goToMonth(viewYear, viewMonth - 1)}
+                    aria-label="Mes anterior"
+                    className="cursor-pointer rounded-md px-3 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                  >
+                    ‹
+                  </button>
+                  <button
+                    onClick={() => goToMonth(startOfToday().getFullYear(), startOfToday().getMonth())}
+                    className="cursor-pointer rounded-md bg-card px-3 py-1 text-xs font-medium shadow-sm ring-1 ring-black/5"
+                  >
+                    Hoy
+                  </button>
+                  <button
+                    onClick={() => goToMonth(viewYear, viewMonth + 1)}
+                    aria-label="Mes siguiente"
+                    className="cursor-pointer rounded-md px-3 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                  >
+                    ›
+                  </button>
                 </div>
-              )}
+              </div>
             </div>
+
+            <CalendarMonth clients={clients} year={viewYear} month={viewMonth} />
           </div>
 
           {/* Avisos */}
