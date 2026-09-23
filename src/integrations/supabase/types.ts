@@ -50,6 +50,38 @@ export type Database = {
         }
         Relationships: []
       }
+      service_history: {
+        Row: {
+          client_id: string
+          client_name: string
+          created_at: string
+          id: string
+          service_date: string
+        }
+        Insert: {
+          client_id: string
+          client_name: string
+          created_at?: string
+          id?: string
+          service_date: string
+        }
+        Update: {
+          client_id?: string
+          client_name?: string
+          created_at?: string
+          id?: string
+          service_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_history_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

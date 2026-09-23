@@ -5,6 +5,7 @@ import {
   deleteClient,
   dueDate,
   fetchClients,
+  fetchHistory,
   formatDate,
   getStatus,
   initials,
@@ -12,6 +13,7 @@ import {
   startOfToday,
   createClient,
   type Client,
+  type HistoryEntry,
   type ServiceStatus,
 } from "@/lib/clients";
 
@@ -55,30 +57,45 @@ const MONTHS = [
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
 ];
 
+const CURRENT_YEAR = new Date().getFullYear();
+const YEARS = Array.from({ length: 21 }, (_, i) => CURRENT_YEAR - 10 + i);
+
 function dateKey(d: Date): string {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 
 export function ServiceDashboard() {
   const [clients, setClients] = useState<Client[]>([]);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [suggestOpen, setSuggestOpen] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [monthOffset, setMonthOffset] = useState(0);
+  const [tab, setTab] = useState<"diario" | "todos">("diario");
+  const [viewYear, setViewYear] = useState(() => startOfToday().getFullYear());
+  const [viewMonth, setViewMonth] = useState(() => startOfToday().getMonth());
 
   const reload = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      setClients(await fetchClients());
+      const [cs, hs] = await Promise.all([fetchClients(), fetchHistory()]);
+      setClients(cs);
+      setHistory(hs);
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo cargar la lista");
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const goToMonth = (y: number, m: number) => {
+    const d = new Date(y, m, 1);
+    setViewYear(d.getFullYear());
+    setViewMonth(d.getMonth());
+  };
 
   useEffect(() => {
     void reload();
@@ -91,7 +108,7 @@ export function ServiceDashboard() {
 
   const markServiced = async (client: Client) => {
     try {
-      await registerServiceToday(client.id);
+      await registerServiceToday({ id: client.id, name: client.name });
       flash(`Servicio registrado para ${client.name}`);
       await reload();
     } catch (e) {
@@ -145,6 +162,8 @@ export function ServiceDashboard() {
       <Header
         onAdd={() => setShowForm(true)}
         pending={notices.length}
+        tab={tab}
+        onTab={setTab}
       />
 
       <main className="mx-auto max-w-[1400px] px-6 py-8">
@@ -159,26 +178,79 @@ export function ServiceDashboard() {
           </div>
         )}
 
-        {/* Buscador de la base de datos */}
+        {/* Buscador de la base de datos con autocompletado */}
         <section className="mb-8">
-          <div className="rounded-xl border border-border/60 bg-card p-1 shadow-sm ring-1 ring-black/5">
-            <div className="relative">
-              <svg
-                className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-primary"
-                fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Buscar cliente por nombre, teléfono, dirección o tipo de servicio…"
-                aria-label="Buscar cliente"
-                className="h-14 w-full rounded-lg bg-transparent pl-12 pr-4 text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/20"
-              />
+          <div className="relative">
+            <div className="rounded-xl border border-border/60 bg-card p-1 shadow-sm ring-1 ring-black/5">
+              <div className="relative">
+                <svg
+                  className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-primary"
+                  fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setSuggestOpen(true);
+                  }}
+                  onFocus={() => setSuggestOpen(true)}
+                  onBlur={() => window.setTimeout(() => setSuggestOpen(false), 150)}
+                  onKeyDown={(e) => e.key === "Escape" && setSuggestOpen(false)}
+                  placeholder="Buscar cliente por nombre, teléfono, dirección o tipo de servicio…"
+                  aria-label="Buscar cliente"
+                  autoComplete="off"
+                  role="combobox"
+                  aria-expanded={suggestOpen}
+                  className="h-14 w-full rounded-lg bg-transparent pl-12 pr-4 text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
             </div>
+
+            {suggestOpen && query.trim() !== "" && (
+              <ul className="absolute left-0 right-0 top-full z-40 mt-1 max-h-80 overflow-auto rounded-xl border border-border bg-card py-1 shadow-xl ring-1 ring-black/5">
+                {filtered.length === 0 ? (
+                  <li className="px-4 py-3 text-sm text-muted-foreground">
+                    Sin coincidencias para «{query}»
+                  </li>
+                ) : (
+                  filtered.slice(0, 8).map((c) => {
+                    const meta = STATUS_META[getStatus(c)];
+                    return (
+                      <li key={c.id}>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            setQuery(c.name);
+                            setSuggestOpen(false);
+                            setTab("todos");
+                          }}
+                          className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted"
+                        >
+                          <span className="grid size-7 shrink-0 place-items-center rounded-full bg-muted font-mono text-[10px] font-bold">
+                            {initials(c.name)}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium">{c.name}</span>
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {[c.phone, c.service_type, c.address].filter(Boolean).join(" · ") || "Sin datos extra"}
+                            </span>
+                          </span>
+                          <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${meta.badge}`}>
+                            {meta.label}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })
+                )}
+              </ul>
+            )}
           </div>
+
           <div className="mt-3 flex items-center gap-3 px-2">
             <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
               Base de datos
@@ -197,70 +269,73 @@ export function ServiceDashboard() {
           </div>
         </section>
 
+        {tab === "todos" && (
+          <AllClientsView
+            clients={filtered}
+            total={clients.length}
+            history={history}
+            loading={loading}
+            query={query}
+            onServiced={(c) => void markServiced(c)}
+            onDelete={(c) => void removeClient(c)}
+          />
+        )}
+
+        {tab === "diario" && (
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
           {/* Calendario */}
           <div className="space-y-6 lg:col-span-8">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-xl font-semibold tracking-tight">
                 Calendario de servicios
               </h2>
-              <div className="flex items-center gap-1 rounded-lg border border-border bg-muted p-0.5">
-                <button
-                  onClick={() => setMonthOffset((v) => v - 1)}
-                  aria-label="Mes anterior"
-                  className="rounded-md px-3 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+              <div className="flex items-center gap-2">
+                <select
+                  aria-label="Mes"
+                  value={viewMonth}
+                  onChange={(e) => setViewMonth(Number(e.target.value))}
+                  className="h-8 cursor-pointer rounded-md border border-border bg-card px-2 text-xs font-medium shadow-sm outline-none focus:ring-2 focus:ring-primary/20"
                 >
-                  ‹
-                </button>
-                <button
-                  onClick={() => setMonthOffset(0)}
-                  className="rounded-md bg-card px-3 py-1 text-xs font-medium shadow-sm ring-1 ring-black/5"
-                >
-                  Hoy
-                </button>
-                <button
-                  onClick={() => setMonthOffset((v) => v + 1)}
-                  aria-label="Mes siguiente"
-                  className="rounded-md px-3 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
-                >
-                  ›
-                </button>
-              </div>
-            </div>
-
-            <CalendarMonth clients={clients} monthOffset={monthOffset} />
-
-            {/* Lista de clientes */}
-            <div className="overflow-hidden rounded-xl bg-card shadow-sm ring-1 ring-black/5">
-              <div className="flex items-center justify-between border-b border-border px-4 py-3">
-                <h3 className="text-sm font-semibold tracking-tight">Clientes</h3>
-                <span className="font-mono text-[11px] text-muted-foreground">
-                  {filtered.length} resultados
-                </span>
-              </div>
-              {loading ? (
-                <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-                  Cargando clientes…
-                </p>
-              ) : filtered.length === 0 ? (
-                <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-                  {query
-                    ? "Ningún cliente coincide con la búsqueda."
-                    : "Aún no hay clientes. Agrega el primero con el botón «Nuevo cliente»."}
-                </p>
-              ) : (
-                <div className="divide-y divide-border">
-                  {filtered.map((c) => (
-                    <ClientRow
-                      key={c.id}
-                      client={c}
-                      onServiced={() => void markServiced(c)}
-                      onDelete={() => void removeClient(c)}
-                    />
+                  {MONTHS.map((m, i) => (
+                    <option key={m} value={i}>{m}</option>
                   ))}
+                </select>
+                <select
+                  aria-label="Año"
+                  value={viewYear}
+                  onChange={(e) => setViewYear(Number(e.target.value))}
+                  className="h-8 cursor-pointer rounded-md border border-border bg-card px-2 font-mono text-xs font-medium shadow-sm outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  {YEARS.map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+                <div className="flex items-center gap-1 rounded-lg border border-border bg-muted p-0.5">
+                  <button
+                    onClick={() => goToMonth(viewYear, viewMonth - 1)}
+                    aria-label="Mes anterior"
+                    className="cursor-pointer rounded-md px-3 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                  >
+                    ‹
+                  </button>
+                  <button
+                    onClick={() => goToMonth(startOfToday().getFullYear(), startOfToday().getMonth())}
+                    className="cursor-pointer rounded-md bg-card px-3 py-1 text-xs font-medium shadow-sm ring-1 ring-black/5"
+                  >
+                    Hoy
+                  </button>
+                  <button
+                    onClick={() => goToMonth(viewYear, viewMonth + 1)}
+                    aria-label="Mes siguiente"
+                    className="cursor-pointer rounded-md px-3 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                  >
+                    ›
+                  </button>
                 </div>
-              )}
+              </div>
             </div>
+
+            <CalendarMonth clients={clients} year={viewYear} month={viewMonth} />
           </div>
 
           {/* Avisos */}
@@ -330,6 +405,8 @@ export function ServiceDashboard() {
             </div>
           </aside>
         </div>
+        )}
+
 
         <footer className="mt-16 flex items-start justify-between border-t border-border pt-8">
           <p className="max-w-[56ch] text-pretty text-[11px] text-muted-foreground">
@@ -360,7 +437,23 @@ export function ServiceDashboard() {
 
 /* ---------------- Header ---------------- */
 
-function Header({ onAdd, pending }: { onAdd: () => void; pending: number }) {
+function Header({
+  onAdd,
+  pending,
+  tab,
+  onTab,
+}: {
+  onAdd: () => void;
+  pending: number;
+  tab: "diario" | "todos";
+  onTab: (t: "diario" | "todos") => void;
+}) {
+  const tabCls = (active: boolean) =>
+    `cursor-pointer rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+      active
+        ? "bg-card text-foreground shadow-sm ring-1 ring-black/5"
+        : "text-muted-foreground hover:text-foreground"
+    }`;
   return (
     <header className="border-b border-border bg-card">
       <div className="mx-auto flex h-16 max-w-[1400px] items-center justify-between px-6">
@@ -373,6 +466,14 @@ function Header({ onAdd, pending }: { onAdd: () => void; pending: number }) {
               Servicio Diario
             </span>
           </div>
+          <nav className="flex items-center gap-1 rounded-lg border border-border bg-muted p-0.5">
+            <button className={tabCls(tab === "diario")} onClick={() => onTab("diario")}>
+              Servicio diario
+            </button>
+            <button className={tabCls(tab === "todos")} onClick={() => onTab("todos")}>
+              Todos los clientes
+            </button>
+          </nav>
         </div>
         <div className="flex items-center gap-4">
           <div className="hidden items-center gap-2 rounded-full bg-muted px-3 py-1 ring-1 ring-black/5 lg:flex">
@@ -400,13 +501,15 @@ function Header({ onAdd, pending }: { onAdd: () => void; pending: number }) {
 
 function CalendarMonth({
   clients,
-  monthOffset,
+  year: viewYear,
+  month: viewMonth,
 }: {
   clients: Client[];
-  monthOffset: number;
+  year: number;
+  month: number;
 }) {
   const today = startOfToday();
-  const view = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
+  const view = new Date(viewYear, viewMonth, 1);
   const year = view.getFullYear();
   const month = view.getMonth();
 
@@ -766,6 +869,120 @@ function ClientFormDialog({
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+/* ---------------- Pestaña: todos los clientes ---------------- */
+
+function AllClientsView({
+  clients,
+  total,
+  history,
+  loading,
+  query,
+  onServiced,
+  onDelete,
+}: {
+  clients: Client[];
+  total: number;
+  history: HistoryEntry[];
+  loading: boolean;
+  query: string;
+  onServiced: (c: Client) => void;
+  onDelete: (c: Client) => void;
+}) {
+  const counts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const h of history) m.set(h.client_id, (m.get(h.client_id) ?? 0) + 1);
+    return m;
+  }, [history]);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight">Todos los clientes</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Base completa de clientes registrados. Usa el buscador de arriba para filtrar.
+          </p>
+        </div>
+        <span className="rounded border border-border bg-muted px-2 py-0.5 font-mono text-[10px]">
+          {clients.length} de {total}
+        </span>
+      </div>
+
+      <div className="overflow-hidden rounded-xl bg-card shadow-sm ring-1 ring-black/5">
+        {loading ? (
+          <p className="px-4 py-10 text-center text-sm text-muted-foreground">
+            Cargando clientes…
+          </p>
+        ) : clients.length === 0 ? (
+          <p className="px-4 py-10 text-center text-sm text-muted-foreground">
+            {query
+              ? "Ningún cliente coincide con la búsqueda."
+              : "Aún no hay clientes. Agrega el primero con el botón «Nuevo cliente»."}
+          </p>
+        ) : (
+          <div className="divide-y divide-border">
+            {clients.map((c) => (
+              <div key={c.id} className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/50">
+                <div className="grid size-8 shrink-0 place-items-center rounded-full bg-muted font-mono text-[11px] font-bold">
+                  {initials(c.name)}
+                </div>
+                <div className="w-40 truncate text-sm font-medium">{c.name}</div>
+                <div className="hidden w-36 font-mono text-xs text-muted-foreground md:block">
+                  {c.phone || "—"}
+                </div>
+                <div className="hidden min-w-0 flex-1 truncate text-xs text-muted-foreground lg:block">
+                  {[c.service_type, c.address].filter(Boolean).join(" · ")}
+                </div>
+                <div className="hidden text-center font-mono text-[11px] text-muted-foreground sm:block">
+                  <span className="block">{formatDate(c.last_service_date)}</span>
+                  <span className="block text-[9px] uppercase tracking-wider">
+                    cada {c.interval_days} d · {counts.get(c.id) ?? 0} atenciones
+                  </span>
+                </div>
+                <span
+                  className={`ml-auto shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${STATUS_META[getStatus(c)].badge}`}
+                >
+                  {STATUS_META[getStatus(c)].label}
+                </span>
+                <button
+                  onClick={() => onServiced(c)}
+                  title="Registrar servicio realizado hoy"
+                  className="shrink-0 cursor-pointer rounded-md border border-border px-2 py-1 text-[10px] font-semibold transition-colors hover:bg-primary hover:text-primary-foreground"
+                >
+                  Servicio ✓
+                </button>
+                <button
+                  onClick={() => onDelete(c)}
+                  aria-label={`Eliminar a ${c.name}`}
+                  className="shrink-0 cursor-pointer rounded-md px-1.5 py-1 text-[10px] font-semibold text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {history.length > 0 && (
+        <div className="overflow-hidden rounded-xl bg-card shadow-sm ring-1 ring-black/5">
+          <div className="border-b border-border px-4 py-3 text-sm font-semibold tracking-tight">
+            Historial de atenciones
+          </div>
+          <div className="max-h-72 divide-y divide-border overflow-auto">
+            {history.slice(0, 50).map((h) => (
+              <div key={h.id} className="flex items-center justify-between px-4 py-2 text-xs">
+                <span className="truncate font-medium">{h.client_name}</span>
+                <span className="font-mono text-muted-foreground">{formatDate(h.service_date)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

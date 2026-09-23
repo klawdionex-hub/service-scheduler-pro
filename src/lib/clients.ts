@@ -75,13 +75,48 @@ export async function createClient(input: NewClient): Promise<Client> {
   return data;
 }
 
-export async function registerServiceToday(id: string): Promise<void> {
+/**
+ * Marca al cliente como atendido hoy:
+ * 1. Guarda la atención en el historial.
+ * 2. Actualiza la fecha de último servicio, con lo que el siguiente aviso
+ *    queda automáticamente programado (último servicio + cada N días).
+ * El estado nunca se congela en "atendido": se recalcula solo en cada carga.
+ */
+export async function registerServiceToday(client: {
+  id: string;
+  name: string;
+}): Promise<void> {
   const today = new Date().toISOString().slice(0, 10);
+
+  const { error: histError } = await supabase.from("service_history").insert({
+    client_id: client.id,
+    client_name: client.name,
+    service_date: today,
+  });
+  if (histError) throw new Error(histError.message);
+
   const { error } = await supabase
     .from("clients")
     .update({ last_service_date: today })
-    .eq("id", id);
+    .eq("id", client.id);
   if (error) throw new Error(error.message);
+}
+
+export type HistoryEntry = {
+  id: string;
+  client_id: string;
+  client_name: string;
+  service_date: string;
+};
+
+export async function fetchHistory(): Promise<HistoryEntry[]> {
+  const { data, error } = await supabase
+    .from("service_history")
+    .select("id, client_id, client_name, service_date")
+    .order("service_date", { ascending: false })
+    .limit(500);
+  if (error) throw new Error(error.message);
+  return data ?? [];
 }
 
 export async function deleteClient(id: string): Promise<void> {
