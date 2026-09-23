@@ -872,3 +872,117 @@ function ClientFormDialog({
     </div>
   );
 }
+
+/* ---------------- Pestaña: todos los clientes ---------------- */
+
+function AllClientsView({
+  clients,
+  total,
+  history,
+  loading,
+  query,
+  onServiced,
+  onDelete,
+}: {
+  clients: Client[];
+  total: number;
+  history: HistoryEntry[];
+  loading: boolean;
+  query: string;
+  onServiced: (c: Client) => void;
+  onDelete: (c: Client) => void;
+}) {
+  const counts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const h of history) m.set(h.client_id, (m.get(h.client_id) ?? 0) + 1);
+    return m;
+  }, [history]);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight">Todos los clientes</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Base completa de clientes registrados. Usa el buscador de arriba para filtrar.
+          </p>
+        </div>
+        <span className="rounded border border-border bg-muted px-2 py-0.5 font-mono text-[10px]">
+          {clients.length} de {total}
+        </span>
+      </div>
+
+      <div className="overflow-hidden rounded-xl bg-card shadow-sm ring-1 ring-black/5">
+        {loading ? (
+          <p className="px-4 py-10 text-center text-sm text-muted-foreground">
+            Cargando clientes…
+          </p>
+        ) : clients.length === 0 ? (
+          <p className="px-4 py-10 text-center text-sm text-muted-foreground">
+            {query
+              ? "Ningún cliente coincide con la búsqueda."
+              : "Aún no hay clientes. Agrega el primero con el botón «Nuevo cliente»."}
+          </p>
+        ) : (
+          <div className="divide-y divide-border">
+            {clients.map((c) => (
+              <div key={c.id} className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/50">
+                <div className="grid size-8 shrink-0 place-items-center rounded-full bg-muted font-mono text-[11px] font-bold">
+                  {initials(c.name)}
+                </div>
+                <div className="w-40 truncate text-sm font-medium">{c.name}</div>
+                <div className="hidden w-36 font-mono text-xs text-muted-foreground md:block">
+                  {c.phone || "—"}
+                </div>
+                <div className="hidden min-w-0 flex-1 truncate text-xs text-muted-foreground lg:block">
+                  {[c.service_type, c.address].filter(Boolean).join(" · ")}
+                </div>
+                <div className="hidden text-center font-mono text-[11px] text-muted-foreground sm:block">
+                  <span className="block">{formatDate(c.last_service_date)}</span>
+                  <span className="block text-[9px] uppercase tracking-wider">
+                    cada {c.interval_days} d · {counts.get(c.id) ?? 0} atenciones
+                  </span>
+                </div>
+                <span
+                  className={`ml-auto shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${STATUS_META[getStatus(c)].badge}`}
+                >
+                  {STATUS_META[getStatus(c)].label}
+                </span>
+                <button
+                  onClick={() => onServiced(c)}
+                  title="Registrar servicio realizado hoy"
+                  className="shrink-0 cursor-pointer rounded-md border border-border px-2 py-1 text-[10px] font-semibold transition-colors hover:bg-primary hover:text-primary-foreground"
+                >
+                  Servicio ✓
+                </button>
+                <button
+                  onClick={() => onDelete(c)}
+                  aria-label={`Eliminar a ${c.name}`}
+                  className="shrink-0 cursor-pointer rounded-md px-1.5 py-1 text-[10px] font-semibold text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {history.length > 0 && (
+        <div className="overflow-hidden rounded-xl bg-card shadow-sm ring-1 ring-black/5">
+          <div className="border-b border-border px-4 py-3 text-sm font-semibold tracking-tight">
+            Historial de atenciones
+          </div>
+          <div className="max-h-72 divide-y divide-border overflow-auto">
+            {history.slice(0, 50).map((h) => (
+              <div key={h.id} className="flex items-center justify-between px-4 py-2 text-xs">
+                <span className="truncate font-medium">{h.client_name}</span>
+                <span className="font-mono text-muted-foreground">{formatDate(h.service_date)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
