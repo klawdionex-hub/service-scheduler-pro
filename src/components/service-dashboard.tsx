@@ -402,6 +402,8 @@ export function ServiceDashboard() {
             </div>
           </aside>
         </div>
+        )}
+
 
         <footer className="mt-16 flex items-start justify-between border-t border-border pt-8">
           <p className="max-w-[56ch] text-pretty text-[11px] text-muted-foreground">
@@ -432,7 +434,23 @@ export function ServiceDashboard() {
 
 /* ---------------- Header ---------------- */
 
-function Header({ onAdd, pending }: { onAdd: () => void; pending: number }) {
+function Header({
+  onAdd,
+  pending,
+  tab,
+  onTab,
+}: {
+  onAdd: () => void;
+  pending: number;
+  tab: "diario" | "todos";
+  onTab: (t: "diario" | "todos") => void;
+}) {
+  const tabCls = (active: boolean) =>
+    `cursor-pointer rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+      active
+        ? "bg-card text-foreground shadow-sm ring-1 ring-black/5"
+        : "text-muted-foreground hover:text-foreground"
+    }`;
   return (
     <header className="border-b border-border bg-card">
       <div className="mx-auto flex h-16 max-w-[1400px] items-center justify-between px-6">
@@ -445,6 +463,14 @@ function Header({ onAdd, pending }: { onAdd: () => void; pending: number }) {
               Servicio Diario
             </span>
           </div>
+          <nav className="flex items-center gap-1 rounded-lg border border-border bg-muted p-0.5">
+            <button className={tabCls(tab === "diario")} onClick={() => onTab("diario")}>
+              Servicio diario
+            </button>
+            <button className={tabCls(tab === "todos")} onClick={() => onTab("todos")}>
+              Todos los clientes
+            </button>
+          </nav>
         </div>
         <div className="flex items-center gap-4">
           <div className="hidden items-center gap-2 rounded-full bg-muted px-3 py-1 ring-1 ring-black/5 lg:flex">
@@ -472,10 +498,12 @@ function Header({ onAdd, pending }: { onAdd: () => void; pending: number }) {
 
 function CalendarMonth({
   clients,
-  monthOffset,
+  year: viewYear,
+  month: viewMonth,
 }: {
   clients: Client[];
-  monthOffset: number;
+  year: number;
+  month: number;
 }) {
   const today = startOfToday();
   const view = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
