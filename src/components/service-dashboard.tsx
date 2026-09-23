@@ -5,6 +5,7 @@ import {
   deleteClient,
   dueDate,
   fetchClients,
+  fetchHistory,
   formatDate,
   getStatus,
   initials,
@@ -12,6 +13,7 @@ import {
   startOfToday,
   createClient,
   type Client,
+  type HistoryEntry,
   type ServiceStatus,
 } from "@/lib/clients";
 
@@ -61,24 +63,36 @@ function dateKey(d: Date): string {
 
 export function ServiceDashboard() {
   const [clients, setClients] = useState<Client[]>([]);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [suggestOpen, setSuggestOpen] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [monthOffset, setMonthOffset] = useState(0);
+  const [tab, setTab] = useState<"diario" | "todos">("diario");
+  const [viewYear, setViewYear] = useState(() => startOfToday().getFullYear());
+  const [viewMonth, setViewMonth] = useState(() => startOfToday().getMonth());
 
   const reload = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      setClients(await fetchClients());
+      const [cs, hs] = await Promise.all([fetchClients(), fetchHistory()]);
+      setClients(cs);
+      setHistory(hs);
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo cargar la lista");
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const goToMonth = (y: number, m: number) => {
+    const d = new Date(y, m, 1);
+    setViewYear(d.getFullYear());
+    setViewMonth(d.getMonth());
+  };
 
   useEffect(() => {
     void reload();
@@ -91,7 +105,7 @@ export function ServiceDashboard() {
 
   const markServiced = async (client: Client) => {
     try {
-      await registerServiceToday(client.id);
+      await registerServiceToday({ id: client.id, name: client.name });
       flash(`Servicio registrado para ${client.name}`);
       await reload();
     } catch (e) {
