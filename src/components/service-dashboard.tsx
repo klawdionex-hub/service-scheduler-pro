@@ -57,6 +57,9 @@ const MONTHS = [
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
 ];
 
+const CURRENT_YEAR = new Date().getFullYear();
+const YEARS = Array.from({ length: 21 }, (_, i) => CURRENT_YEAR - 10 + i);
+
 function dateKey(d: Date): string {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
@@ -506,7 +509,7 @@ function CalendarMonth({
   month: number;
 }) {
   const today = startOfToday();
-  const view = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
+  const view = new Date(viewYear, viewMonth, 1);
   const year = view.getFullYear();
   const month = view.getMonth();
 
