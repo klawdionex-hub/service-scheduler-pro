@@ -17,9 +17,13 @@ export type Database = {
       clients: {
         Row: {
           address: string | null
+          consecutive: string | null
           created_at: string
+          equipment_code: string | null
           id: string
           interval_days: number
+          interval_unit: string
+          interval_value: number
           last_service_date: string | null
           name: string
           notes: string | null
@@ -28,9 +32,13 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          consecutive?: string | null
           created_at?: string
+          equipment_code?: string | null
           id?: string
           interval_days?: number
+          interval_unit?: string
+          interval_value?: number
           last_service_date?: string | null
           name: string
           notes?: string | null
@@ -39,9 +47,13 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          consecutive?: string | null
           created_at?: string
+          equipment_code?: string | null
           id?: string
           interval_days?: number
+          interval_unit?: string
+          interval_value?: number
           last_service_date?: string | null
           name?: string
           notes?: string | null
@@ -54,6 +66,7 @@ export type Database = {
         Row: {
           client_id: string
           client_name: string
+          client_number: string | null
           created_at: string
           id: string
           service_date: string
@@ -61,6 +74,7 @@ export type Database = {
         Insert: {
           client_id: string
           client_name: string
+          client_number?: string | null
           created_at?: string
           id?: string
           service_date: string
@@ -68,6 +82,7 @@ export type Database = {
         Update: {
           client_id?: string
           client_name?: string
+          client_number?: string | null
           created_at?: string
           id?: string
           service_date?: string
