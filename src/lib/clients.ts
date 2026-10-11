@@ -261,6 +261,56 @@ export async function setSchedule(
 }
 
 /**
+ * Normaliza lo que se pega como ubicación: un enlace de Google Maps
+ * (maps.app.goo.gl, google.com/maps, goo.gl/maps…) o coordenadas "19.43, -99.13".
+ * Devuelve null si está vacío y lanza un error si no se reconoce.
+ */
+export function normalizeMapsInput(raw: string): string | null {
+  const v = raw.trim();
+  if (!v) return null;
+  const coords = v.match(/^(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)$/);
+  if (coords) return `https://www.google.com/maps?q=${coords[1]},${coords[2]}`;
+  let url: URL;
+  try {
+    url = new URL(v);
+  } catch {
+    throw new Error("Pega un enlace de Google Maps (https://…) o coordenadas como 19.43, -99.13");
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new Error("El enlace debe empezar con https://");
+  }
+  return url.toString();
+}
+
+/** Guarda (o borra, con null) la ubicación de Google Maps del cliente. */
+export async function setMapsUrl(id: string, mapsUrl: string | null): Promise<void> {
+  const { error } = await supabase.from("clients").update({ maps_url: mapsUrl }).eq("id", id);
+  if (error) {
+    throw new Error(
+      error.message.includes("maps_url")
+        ? "Falta crear la columna de ubicación en la base de datos (migración pendiente en Lovable)"
+        : error.message,
+    );
+  }
+}
+
+/** Enlace de Google Maps del cliente: el que se capturó o, si no hay, una búsqueda por dirección. */
+export function mapsLink(
+  client: Pick<Client, "maps_url" | "address">,
+): { url: string; exact: boolean } | null {
+  const url = client.maps_url?.trim();
+  if (url) return { url, exact: true };
+  const address = client.address?.trim();
+  if (address) {
+    return {
+      url: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`,
+      exact: false,
+    };
+  }
+  return null;
+}
+
+/**
  * Registra que el cliente fue atendido:
  * 1. Guarda la visita en el historial.
  * 2. Pone "Último servicio" = fecha de atención.

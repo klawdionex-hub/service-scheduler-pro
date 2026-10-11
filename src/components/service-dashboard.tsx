@@ -19,11 +19,14 @@ import {
   importKey,
   initials,
   intervalLabel,
+  mapsLink,
   markAttended,
   nextDueDate,
+  normalizeMapsInput,
   parseISODate,
   projectedDates,
   searchClients,
+  setMapsUrl,
   setSchedule,
   startOfToday,
   toLocalISO,
@@ -298,6 +301,7 @@ export function ServiceDashboard() {
                               ` · Último: ${formatDate(c.last_service_date)} · ${intervalLabel(c)}`}
                           </span>
                         </span>
+                        <MapsButton client={c} compact className="px-1.5 py-1" />
                         <StatusBadge status={status} />
                         {status !== "sinprogramar" && (
                           <button
@@ -550,6 +554,62 @@ function NumberBadge({ client }: { client: Client }) {
     >
       {num || initials(client.name)}
     </span>
+  );
+}
+
+/** Botón que abre la ubicación del cliente en Google Maps (o busca su dirección). */
+function MapsButton({
+  client,
+  className = "",
+  compact,
+}: {
+  client: Pick<Client, "maps_url" | "address">;
+  className?: string;
+  compact?: boolean;
+}) {
+  const link = mapsLink(client);
+  if (!link) return null;
+  const label = link.exact ? "Ver ubicación" : "Buscar dirección en Maps";
+  return (
+    <a
+      href={link.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={label}
+      aria-label={label}
+      onMouseDown={(e) => e.preventDefault()}
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold transition-colors hover:border-primary hover:text-primary ${
+        link.exact ? "" : "text-muted-foreground"
+      } ${className}`}
+    >
+      <svg
+        className="size-3.5"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={2}
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M12 21s-7-6.2-7-11.5a7 7 0 1114 0C19 14.8 12 21 12 21z"
+        />
+        <circle cx="12" cy="9.5" r="2.5" />
+      </svg>
+      {!compact && label}
+    </a>
+  );
+}
+
+/** Teléfono que se puede tocar para llamar (usa el primer número si hay varios). */
+function PhoneLink({ phone }: { phone: string | null }) {
+  if (!phone) return <p className="font-mono text-xs">—</p>;
+  const digits = phone.split("/")[0]!.replace(/[^\d+]/g, "");
+  if (digits.replace(/\D/g, "").length < 7) return <p className="font-mono text-xs">{phone}</p>;
+  return (
+    <a href={`tel:${digits}`} className="font-mono text-xs text-primary hover:underline">
+      {phone}
+    </a>
   );
 }
 
@@ -892,7 +952,7 @@ function NoticeCard({
           <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
             Teléfono
           </p>
-          <p className="font-mono text-xs">{client.phone || "—"}</p>
+          <PhoneLink phone={client.phone} />
         </div>
         <div>
           <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
@@ -901,6 +961,7 @@ function NoticeCard({
           <p className="font-mono text-xs">{formatDate(client.last_service_date)}</p>
         </div>
       </div>
+      <MapsButton client={client} className="mt-3 w-full justify-center" />
       <div className="mt-3 flex items-center justify-between gap-2">
         <span className="font-mono text-[10px] text-muted-foreground">
           Le toca: {formatDate(due)}
@@ -946,6 +1007,10 @@ function ClientDialog({
     notes: client.notes ?? "",
   });
   const [attendDate, setAttendDate] = useState(() => toLocalISO(new Date()));
+  const [mapsInput, setMapsInput] = useState(client.maps_url ?? "");
+  const [savedMaps, setSavedMaps] = useState(client.maps_url);
+  const [mapsMsg, setMapsMsg] = useState<string | null>(null);
+  const [mapsChanged, setMapsChanged] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const status = getStatus(client);
@@ -1021,17 +1086,82 @@ function ClientDialog({
     }
   };
 
+  const saveMaps = async () => {
+    setMapsMsg(null);
+    setFormError(null);
+    let value: string | null;
+    try {
+      value = normalizeMapsInput(mapsInput);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Enlace no válido");
+      return;
+    }
+    setSaving(true);
+    try {
+      await setMapsUrl(client.id, value);
+      setSavedMaps(value);
+      setMapsInput(value ?? "");
+      setMapsChanged(true);
+      setMapsMsg(value ? "Ubicación guardada" : "Ubicación borrada");
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "No se pudo guardar la ubicación");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Si se cambió la ubicación, al cerrar se recargan los datos para que se vea en avisos y lista
+  const close = () =>
+    mapsChanged ? void onSaved(`Ubicación actualizada para ${client.name}`) : onClose();
+
   return (
-    <Dialog label={`Ficha de ${client.name}`} onClose={onClose}>
+    <Dialog label={`Ficha de ${client.name}`} onClose={close}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           {num && <p className="font-mono text-xs font-bold text-primary">{num}</p>}
           <h2 className="text-lg font-semibold leading-tight tracking-tight">{client.name}</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {[client.phone || "Sin teléfono", client.address].filter(Boolean).join(" · ")}
-          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+            {client.phone ? <PhoneLink phone={client.phone} /> : <span>Sin teléfono</span>}
+            {client.address && <span>· {client.address}</span>}
+          </div>
         </div>
         <StatusBadge status={status} />
+      </div>
+
+      {/* Ubicación de Google Maps */}
+      <div className="mt-5 rounded-lg border border-border p-4">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold">Ubicación (Google Maps)</p>
+          <MapsButton client={{ maps_url: savedMaps, address: client.address }} />
+        </div>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">
+          En Google Maps: Compartir → Copiar enlace, y pégalo aquí. También acepta coordenadas (ej.
+          19.4326, -99.1332).
+        </p>
+        <div className="mt-3 flex gap-2">
+          <input
+            type="text"
+            inputMode="url"
+            aria-label="Enlace de Google Maps"
+            placeholder="https://maps.app.goo.gl/…"
+            className={inputCls}
+            value={mapsInput}
+            onChange={(e) => {
+              setMapsInput(e.target.value);
+              setMapsMsg(null);
+            }}
+            maxLength={500}
+          />
+          <button
+            type="button"
+            onClick={() => void saveMaps()}
+            disabled={saving || mapsInput.trim() === (savedMaps ?? "")}
+            className="shrink-0 cursor-pointer rounded-md border border-border px-3 text-xs font-semibold transition-colors hover:bg-muted disabled:cursor-default disabled:opacity-50"
+          >
+            Guardar
+          </button>
+        </div>
+        {mapsMsg && <p className="mt-1.5 text-[11px] font-medium text-success">{mapsMsg}</p>}
       </div>
 
       {/* Registrar atención */}
@@ -1176,7 +1306,7 @@ function ClientDialog({
         <div className="flex justify-end gap-2">
           <button
             type="button"
-            onClick={onClose}
+            onClick={close}
             className="cursor-pointer rounded-md border border-border px-4 py-2 text-xs font-medium transition-colors hover:bg-muted"
           >
             Cerrar
@@ -1645,6 +1775,7 @@ function AllClientsView({
                     )}
                   </div>
                   <span className="ml-auto" />
+                  <MapsButton client={c} compact className="px-1.5 py-1" />
                   <StatusBadge status={getStatus(c)} />
                   <button
                     onClick={() => onOpen(c)}
