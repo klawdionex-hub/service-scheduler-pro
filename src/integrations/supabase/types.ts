@@ -25,7 +25,6 @@ export type Database = {
           interval_unit: string
           interval_value: number
           last_service_date: string | null
-          maps_url: string | null
           name: string
           notes: string | null
           phone: string | null
@@ -41,7 +40,6 @@ export type Database = {
           interval_unit?: string
           interval_value?: number
           last_service_date?: string | null
-          maps_url?: string | null
           name: string
           notes?: string | null
           phone?: string | null
@@ -57,7 +55,6 @@ export type Database = {
           interval_unit?: string
           interval_value?: number
           last_service_date?: string | null
-          maps_url?: string | null
           name?: string
           notes?: string | null
           phone?: string | null
